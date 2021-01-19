@@ -7,7 +7,7 @@ using ParallelStencil.FiniteDifferences2D
     macro tanh(args...) esc(:(CUDA.tanh($(args...)))) end
 else
     @init_parallel_stencil(Threads, Float64, 2)
-    pow(x,y) = x^y
+    pow(x,y) = x.^y
     macro pow(args...)  esc(:(pow($(args...)))) end
     macro tanh(args...) esc(:(Base.tanh($(args...)))) end
 end
@@ -23,6 +23,16 @@ end
     @all(EtaC)  = (1.0-θ_e)*@all(EtaC)  + θ_e*( μs/@all(Phi)*η2μs*(1.0+0.5*(1.0/R-1.0)*(1.0+@tanh((@all(Pf)-@all(Pt))/λPe))) )
     @all(K_muf) = (1.0-θ_k)*@all(K_muf) + θ_k*( k_μf0*@pow((@all(Phi)/ϕ0), nperm) )
     @all(Rog)   = ρfg*@all(Phi) + ρsg*(1.0-@all(Phi)) - ρgBG
+    @all(∇V)    = @d_xa(Vx)/dx  + @d_ya(Vy)/dy
+    @all(∇qD)   = @d_xa(qDx)/dx + @d_ya(qDy)/dy
+    return
+end
+
+@parallel function compute_params_∇!(EtaC::Data.Array, K_muf::Data.Array, Rog::Data.Array, ∇V::Data.Array, ∇qD::Data.Array, Phi::Data.Array, Pf::Data.Array, Pt::Data.Array, Vx::Data.Array, Vy::Data.Array, qDx::Data.Array, qDy::Data.Array, μs::Data.Array, η2μs::Data.Number, R::Data.Number, λPe::Data.Number, k_μf0::Data.Number, ϕ0::Data.Array, nperm::Data.Number, θ_e::Data.Number, θ_k::Data.Number, ρfg::Data.Number, ρsg::Data.Number, ρgBG::Data.Array, dx::Data.Number, dy::Data.Number)
+    # overload
+    @all(EtaC)  = (1.0-θ_e)*@all(EtaC)  + θ_e*( @all(μs)./@all(Phi)*η2μs*(1.0+0.5*(1.0/R-1.0)*(1.0+@tanh((@all(Pf)-@all(Pt))/λPe))) )
+    @all(K_muf) = (1.0-θ_k)*@all(K_muf) + θ_k*( k_μf0*@pow((@all(Phi)./@all(ϕ0)), nperm) )
+    @all(Rog)   = ρfg*@all(Phi) + ρsg*(1.0-@all(Phi)) - @all(ρgBG)
     @all(∇V)    = @d_xa(Vx)/dx  + @d_ya(Vy)/dy
     @all(∇qD)   = @d_xa(qDx)/dx + @d_ya(qDy)/dy
     return
@@ -44,6 +54,16 @@ end
     return
 end
 
+@parallel function compute_P_τ!(Pt::Data.Array, Pf::Data.Array, τxx::Data.Array, τyy::Data.Array, σxy::Data.Array, RPt::Data.Array, RPf::Data.Array, dτPf::Data.Array, Vx::Data.Array, Vy::Data.Array, ∇V::Data.Array, dτPt::Data.Array, μs::Data.Array, β_n::Data.Number, dx::Data.Number, dy::Data.Number)
+    # overload
+    @all(Pt)  = @all(Pt) + @all(dτPt) *@all(RPt)
+    @all(Pf)  = @all(Pf) + @all(dτPf)*@all(RPf)
+    @all(τxx) = 2.0*@all(μs)*( @d_xa(Vx)/dx - 1.0/3.0*@all(∇V) - β_n*@all(RPt) )
+    @all(τyy) = 2.0*@all(μs)*( @d_ya(Vy)/dy - 1.0/3.0*@all(∇V) - β_n*@all(RPt) )
+    @all(σxy) = 2.0*@all(μs)*(0.5*( @d_yi(Vx)/dy + @d_xi(Vy)/dx ))
+    return
+end
+
 @parallel function compute_res!(Rx::Data.Array, Ry::Data.Array, dVxdτ::Data.Array, dVydτ::Data.Array, τxx::Data.Array, τyy::Data.Array, σxy::Data.Array, Pt::Data.Array, Rog::Data.Array, dampX::Data.Number, dampY::Data.Number, dx::Data.Number, dy::Data.Number)
     @all(Rx)    = @d_xi(τxx)/dx + @d_ya(σxy)/dy - @d_xi(Pt)/dx
     @all(Ry)    = @d_yi(τyy)/dy + @d_xa(σxy)/dx - @d_yi(Pt)/dy - @av_yi(Rog)
@@ -57,6 +77,16 @@ end
     @inn(Vy)  =  @inn(Vy) + dτV*@all(dVydτ)
     @inn(qDx) = -@av_xi(K_muf)*(@d_xi(Pf)/dx)
     @inn(qDy) = -@av_yi(K_muf)*(@d_yi(Pf)/dy + (ρfg - ρgBG))
+    @all(Phi) =  @all(Phi_o) + (1.0-@all(Phi))*(CN*@all(∇V_o) + (1.0-CN)*@all(∇V))*dt
+    return
+end
+
+@parallel function compute_update!(Vx::Data.Array, Vy::Data.Array, qDx::Data.Array, qDy::Data.Array, Phi::Data.Array, dVxdτ::Data.Array, dVydτ::Data.Array, K_muf::Data.Array, Pf::Data.Array, Phi_o::Data.Array, ∇V::Data.Array, ∇V_o::Data.Array, dτV::Data.Number, ρfg::Data.Number, ρgBG::Data.Array, CN::Data.Number, dt::Data.Number, dx::Data.Number, dy::Data.Number)
+    # overload
+    @inn(Vx)  =  @inn(Vx) + dτV*@all(dVxdτ)
+    @inn(Vy)  =  @inn(Vy) + dτV*@all(dVydτ)
+    @inn(qDx) = -@av_xi(K_muf)*(@d_xi(Pf)/dx)
+    @inn(qDy) = -@av_yi(K_muf)*(@d_yi(Pf)/dy + (ρfg - @all(ρgBG)))
     @all(Phi) =  @all(Phi_o) + (1.0-@all(Phi))*(CN*@all(∇V_o) + (1.0-CN)*@all(∇V))*dt
     return
 end
@@ -86,7 +116,7 @@ end
     ϕ0       = 0.01            # reference porosity
     ra       = 2               # radius of initil porosity perturbation 
     λ0       = 1.0             # standard deviation of initial porosity perturbation  
-    t_tot    = 0.02            # total time
+    t_tot    = 0.05            # total time
     # Physics - dependent scales
     ρsg      = 2.0*ρfg         # solid rho*g 
     lx       = 20.0            # domain size x
@@ -111,13 +141,15 @@ end
     θ_k      = 1e-1            # relaxation factor for non-linear permeability
     dt_red   = 1e-3            # reduction of physical timestep
     # Derived physics
+    ϕ0       = 0.01*ones(nx  ,ny  )           # reference porosity
+    ϕ0[:,1:100] .= 0.02
     μs       = ηC0*ϕ0/η2μs                       # solid shear viscosity
     λ        = λ0*sqrt(k_μf0*ηC0)                # initial perturbation width
-    ρgBG     = ρfg*ϕ0 + ρsg*(1.0-ϕ0)             # Background density
+    ρgBG     = ρfg*ϕ0 + ρsg*(1.0 .- ϕ0)             # Background density
     # Derived numerics
     dx, dy   = lx/(nx-1), ly/(ny-1)              # grid step in x, y
     min_dxy2 = min(dx,dy)^2
-    dτV      = min_dxy2/μs/(1.0+β_n)/4.1/Vsc     # PT time step for velocity
+    dτV      = min_dxy2/minimum(μs)/(1.0+β_n)/4.1/Vsc     # PT time step for velocity
     dτPt     = 4.1*μs*(1.0+β_n)/max(nx,ny)/Ptsc
     dampX    = 1.0-Vdmp/nx
     dampY    = 1.0-Vdmp/ny
@@ -144,18 +176,20 @@ end
     qDx      = @zeros(nx+1,ny  )
     # Initial conditions
     qDy      =   zeros(nx  ,ny+1)
-    Phi      = ϕ0*ones(nx  ,ny  )
+    Phi      = deepcopy(ϕ0)
     Radc     =   zeros(nx  ,ny  )
     Radc    .= [(((ix-1)*dx-0.5*lx)/λ/4.0)^2 + (((iy-1)*dy-0.25*ly)/λ)^2 for ix=1:size(Radc,1), iy=1:size(Radc,2)]
     Phi[Radc.<1.0] .= Phi[Radc.<1.0] .+ ϕA
     EtaC     = μs./Phi.*η2μs.*0.0 .+ 1.0
     K_muf    = k_μf0.*(Phi./ϕ0).*0.0 .+ 1.0
     ϕ0bc     = mean.(Phi[:,end])
-    qDy[:,[1,end]] .= (ρsg.-ρfg).*(1.0.-ϕ0bc).*k_μf0.*(ϕ0bc./ϕ0).^nperm
+    qDy[:,[1,end]] .= (ρsg.-ρfg).*(1.0.-ϕ0bc).*k_μf0.*(ϕ0bc./ϕ0[:,[1,end]]).^nperm
     Phi      = Data.Array(Phi)
     EtaC     = Data.Array(EtaC)
     K_muf    = Data.Array(K_muf)
     qDy      = Data.Array(qDy)
+    ρgBG      = Data.Array(ρgBG)
+    μs      = Data.Array(μs)
     t        = 0.0
     it       = 1
     # Preparation of visualisation
