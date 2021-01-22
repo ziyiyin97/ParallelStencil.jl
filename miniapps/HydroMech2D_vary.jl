@@ -11,7 +11,7 @@ else
     macro pow(args...)  esc(:(pow($(args...)))) end
     macro tanh(args...) esc(:(Base.tanh($(args...)))) end
 end
-using Plots, Printf, Statistics, LinearAlgebra
+using Plots, Printf, Statistics, LinearAlgebra, Images
 
 @parallel function compute_dτ!(dτVx::Data.Array, dτVy::Data.Array, dτPt::Data.Array, μs::Data.Array, min_dxy2::Data.Number, β_n::Data.Number, Vsc::Data.Number, Ptsc::Data.Number, nx::Int, ny::Int)
     @all(dτVx) = min_dxy2/@av_xi(μs)/(1.0+β_n)/4.1/Vsc
@@ -119,7 +119,8 @@ end
     ρfg      = 1.0             # fluid rho*g
     k_μf0    = 1.0             # reference permeability
     ηC0      = 1000*ones(nx, ny)    # reference bulk viscosity
-    ηC0[:,100:150] .= 1
+    ηC0[:,100:150] .= 100
+    ηC0 = imfilter(ηC0, Kernel.gaussian(50))
     # Physics - non-dimensional parameters
     η2μs     = 10.0            # bulk/shear viscosity ration
     R        = 500.0           # Compaction/decompaction strength ratio for bulk rheology 
@@ -149,6 +150,7 @@ end
     # Derived physics
     ϕ0       = 0.3*ones(nx  ,ny  )           # reference porosity
     ϕ0[:,100:150] .= 0.05
+    ϕ0 = imfilter(ϕ0, Kernel.gaussian(50))
     μs       = ηC0.*ϕ0/η2μs                       # solid shear viscosity
     ρgBG     = ρfg*ϕ0 + ρsg*(1.0 .- ϕ0)             # Background density
     # Derived numerics

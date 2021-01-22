@@ -83,7 +83,7 @@ end
     η2μs     = 10.0            # bulk/shear viscosity ration
     R        = 500.0           # Compaction/decompaction strength ratio for bulk rheology 
     nperm    = 3.0             # Carman-Kozeny exponent
-    ϕ0       = 0.01            # reference porosity
+    ϕ0       = 0.05            # reference porosity
     ra       = 2               # radius of initil porosity perturbation 
     λ0       = 1.0             # standard deviation of initial porosity perturbation  
     t_tot    = 0.02            # total time
@@ -91,7 +91,7 @@ end
     ρsg      = 2.0*ρfg         # solid rho*g 
     lx       = 20.0            # domain size x
     ly       = ra*lx           # domain size y
-    ϕA       = 2*ϕ0            # amplitude of initial porosity perturbation       
+    ϕA       = 0.7            # amplitude of initial porosity perturbation       
     λPe      = 0.01            # effective pressure transition zone
     dt       = 1e-5            # physical time-step
     # Numerics
